@@ -1,6 +1,20 @@
 # Claude API (script, planning, reference)
 anthropic>=0.40.0
 
+# ── shorts_automation 파이프라인 추가 의존성 ──────────────────────────────
+
+# YouTube Data API v3
+google-api-python-client>=2.100.0
+
+# Gemini AI (대본 분석/재작성, Claude로 교체 가능)
+google-generativeai>=0.7.0
+
+# YouTube 영상 다운로드 + 자막 추출
+yt-dlp>=2024.1.0
+
+# 한국어 TTS (무료)
+gTTS>=2.5.0
+
 # Free TTS - Microsoft Neural Voices (no GPU, no cost)
 edge-tts>=6.1.9
 

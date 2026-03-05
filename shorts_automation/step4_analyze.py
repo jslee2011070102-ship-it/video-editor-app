@@ -1,0 +1,154 @@
+"""
+5~9단계: AI(Gemini 또는 Claude)로 자막 분석 + 한국어 대본 재작성
+
+나중에 Claude API로 교체하려면 .env에서 AI_PROVIDER=claude 로 설정
+"""
+import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from config import AI_PROVIDER, GEMINI_API_KEY, ANTHROPIC_API_KEY, SCRIPTS_DIR
+from step3_download import parse_srt
+
+# ─── AI 호출 레이어 (교체 가능) ───────────────────────────────────────────
+
+def _call_gemini(prompt: str) -> str:
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        print("google-generativeai 패키지가 필요합니다: pip install google-generativeai")
+        sys.exit(1)
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    response = model.generate_content(prompt)
+    return response.text
+
+
+def _call_claude(prompt: str) -> str:
+    try:
+        import anthropic
+    except ImportError:
+        print("anthropic 패키지가 필요합니다: pip install anthropic")
+        sys.exit(1)
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    message = client.messages.create(
+        model='claude-opus-4-6',
+        max_tokens=4096,
+        messages=[{'role': 'user', 'content': prompt}],
+    )
+    return message.content[0].text
+
+
+def call_ai(prompt: str) -> str:
+    if AI_PROVIDER == 'claude':
+        print(f"  (Claude API 사용)")
+        return _call_claude(prompt)
+    print(f"  (Gemini API 사용)")
+    return _call_gemini(prompt)
+
+
+# ─── 분석 + 대본 재작성 ────────────────────────────────────────────────────
+
+ANALYSIS_PROMPT = """아래는 유튜브 영상의 자막입니다.
+
+[자막 내용]
+{subtitle_text}
+
+다음 작업을 수행하고, 반드시 아래 JSON 형식으로만 응답해주세요. 마크다운 코드블록 없이 순수 JSON만 출력하세요.
+
+{{
+  "narrative_structure": {{
+    "intro":       {{"summary": "도입부 요약", "start_ratio": 0.0, "end_ratio": 0.25}},
+    "development": {{"summary": "전개부 요약", "start_ratio": 0.25, "end_ratio": 0.70}},
+    "climax":      {{"summary": "결말/클라이맥스 요약", "start_ratio": 0.70, "end_ratio": 1.0}}
+  }},
+  "keywords": ["핵심키워드1", "핵심키워드2", "핵심키워드3"],
+  "rearranged_order": ["climax", "intro", "development"],
+  "similar_keywords": {{"원본키워드": "유사단어"}},
+  "new_script": "완전히 새로 작성된 한국어 쇼츠 대본"
+}}
+
+new_script 작성 규칙:
+- 분량: 40~55초 분량 (약 200~280자)
+- 첫 2~3초: 시청자가 멈추게 만드는 강한 훅
+- 문체: 자연스러운 한국어 구어체
+- 원본 문장을 직역하지 말고 완전히 새로 작성
+- rearranged_order 순서로 기승전결 재배치 반영
+- 문장 사이 줄바꿈 없이 이어서 작성"""
+
+
+def _extract_json(raw: str) -> dict:
+    """AI 응답에서 JSON 파싱 (마크다운 코드블록 포함 대응)"""
+    # 마크다운 코드블록 제거
+    cleaned = re.sub(r'^```(?:json)?\s*', '', raw.strip(), flags=re.MULTILINE)
+    cleaned = re.sub(r'\s*```$', '', cleaned.strip(), flags=re.MULTILINE)
+    cleaned = cleaned.strip()
+
+    # JSON 객체 추출
+    match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+    if not match:
+        raise ValueError("JSON을 찾을 수 없습니다.")
+
+    return json.loads(match.group())
+
+
+def analyze_and_rewrite(subtitle_text: str, video_id: str) -> dict:
+    print(f"\n=== 5~9단계: AI 분석 + 대본 재작성 ===\n")
+    print(f"자막 길이: {len(subtitle_text)}자")
+
+    prompt = ANALYSIS_PROMPT.format(subtitle_text=subtitle_text[:6000])
+
+    print("AI 분석 중...")
+    raw = call_ai(prompt)
+
+    try:
+        analysis = _extract_json(raw)
+    except (ValueError, json.JSONDecodeError) as e:
+        print(f"JSON 파싱 실패: {e}")
+        print(f"AI 응답 앞부분:\n{raw[:600]}")
+        return {}
+
+    # 결과 저장
+    script_path = SCRIPTS_DIR / f"{video_id}_script.txt"
+    script_path.write_text(analysis.get('new_script', ''), encoding='utf-8')
+    print(f"대본 저장: {script_path.name}")
+
+    analysis_path = SCRIPTS_DIR / f"{video_id}_analysis.json"
+    analysis_path.write_text(
+        json.dumps(analysis, ensure_ascii=False, indent=2), encoding='utf-8'
+    )
+    print(f"분석 결과 저장: {analysis_path.name}")
+
+    order = analysis.get('rearranged_order', [])
+    print(f"\n재배치 순서: {' → '.join(order)}")
+    script_preview = analysis.get('new_script', '')[:120]
+    print(f"새 대본 미리보기:\n  {script_preview}...")
+
+    return analysis
+
+
+def run_step4(subtitle_path: str | None, video_id: str) -> dict:
+    if not subtitle_path:
+        print("\n자막 파일이 없습니다. 기본 대본 생성을 건너뜁니다.")
+        return {}
+
+    subtitle_text = parse_srt(subtitle_path)
+    if not subtitle_text.strip():
+        print("자막 내용이 비어 있습니다.")
+        return {}
+
+    return analyze_and_rewrite(subtitle_text, video_id)
+
+
+if __name__ == '__main__':
+    sample = (
+        "This is an incredible story. A stray dog saved a child from danger. "
+        "The dog barked loudly to alert the parents. Everyone was amazed by the dog's courage. "
+        "The family decided to adopt the dog. Now they live happily together."
+    )
+    result = analyze_and_rewrite(sample, 'test_id')
+    print(json.dumps(result, ensure_ascii=False, indent=2))
