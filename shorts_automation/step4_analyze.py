@@ -16,14 +16,16 @@ from step3_download import parse_srt
 
 def _call_gemini(prompt: str) -> str:
     try:
-        import google.generativeai as genai
+        from google import genai
     except ImportError:
-        print("google-generativeai 패키지가 필요합니다: pip install google-generativeai")
+        print("google-genai 패키지가 필요합니다: pip install google-genai")
         sys.exit(1)
 
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    response = model.generate_content(prompt)
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    response = client.models.generate_content(
+        model='gemini-2.0-flash',
+        contents=prompt,
+    )
     return response.text
 
 

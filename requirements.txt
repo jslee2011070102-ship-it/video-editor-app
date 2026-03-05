@@ -7,7 +7,7 @@ anthropic>=0.40.0
 google-api-python-client>=2.100.0
 
 # Gemini AI (대본 분석/재작성, Claude로 교체 가능)
-google-generativeai>=0.7.0
+google-genai>=1.0.0
 
 # YouTube 영상 다운로드 + 자막 추출
 yt-dlp>=2024.1.0
