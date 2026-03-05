@@ -1,0 +1,25 @@
+# API 키 - 절대 커밋하지 말 것
+.env
+*.env
+.env.*
+!.env.example
+!.env.shorts.example
+
+# 다운로드/생성 파일 (용량 큼)
+shorts_automation/downloads/
+shorts_automation/clips/
+shorts_automation/audio/
+shorts_automation/output/
+shorts_automation/subtitles/
+shorts_automation/scripts/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
