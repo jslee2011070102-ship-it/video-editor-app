@@ -22,11 +22,21 @@ def _call_gemini(prompt: str) -> str:
         sys.exit(1)
 
     client = genai.Client(api_key=GEMINI_API_KEY)
-    response = client.models.generate_content(
-        model='gemini-2.0-flash',
-        contents=prompt,
-    )
-    return response.text
+    # 무료 할당량 넉넉한 순서로 모델 시도
+    models = ['gemini-1.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b', 'gemini-2.0-flash']
+    last_err = None
+    for model_name in models:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            print(f"  (사용 모델: {model_name})")
+            return response.text
+        except Exception as e:
+            print(f"  {model_name} 실패: {str(e)[:100]}")
+            last_err = e
+    raise last_err
 
 
 def _call_claude(prompt: str) -> str:
