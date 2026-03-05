@@ -133,17 +133,25 @@ def analyze_and_rewrite(subtitle_text: str, video_id: str) -> dict:
     return analysis
 
 
-def run_step4(subtitle_path: str | None, video_id: str) -> dict:
-    if not subtitle_path:
-        print("\n자막 파일이 없습니다. 기본 대본 생성을 건너뜁니다.")
+def run_step4(subtitle_path: str | None, video_id: str, video_info: dict | None = None) -> dict:
+    if subtitle_path:
+        subtitle_text = parse_srt(subtitle_path)
+        if subtitle_text.strip():
+            return analyze_and_rewrite(subtitle_text, video_id)
+        print("자막 내용이 비어 있습니다. 영상 제목/설명으로 대본을 생성합니다.")
+    else:
+        print("\n자막 없음. 영상 제목/설명 기반으로 대본을 생성합니다.")
+
+    # 자막 없을 때 fallback: 제목+설명으로 대본 생성
+    if not video_info:
+        print("영상 정보도 없습니다. 대본 생성을 건너뜁니다.")
         return {}
 
-    subtitle_text = parse_srt(subtitle_path)
-    if not subtitle_text.strip():
-        print("자막 내용이 비어 있습니다.")
-        return {}
-
-    return analyze_and_rewrite(subtitle_text, video_id)
+    title = video_info.get('title', '')
+    description = video_info.get('description', '')[:500]
+    fallback_text = f"영상 제목: {title}\n영상 설명: {description}"
+    print(f"제목 기반 대본 생성: {title[:60]}")
+    return analyze_and_rewrite(fallback_text, video_id)
 
 
 if __name__ == '__main__':

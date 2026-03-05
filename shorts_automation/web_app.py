@@ -45,7 +45,7 @@ def _run_pipeline(job_id: str, video: dict):
             raise RuntimeError('영상 다운로드에 실패했습니다.')
 
         upd('AI 분석 + 한국어 대본 재작성 중... (30~60초 소요)', 30)
-        analysis = run_step4(dl.get('subtitle_path'), video_id)
+        analysis = run_step4(dl.get('subtitle_path'), video_id, video_info=video)
         script = analysis.get('new_script', '').strip()
         if not script:
             raise RuntimeError('AI 대본 생성에 실패했습니다.')
