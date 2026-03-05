@@ -32,3 +32,6 @@ asyncio-throttle>=1.0.2
 # Utilities
 python-dotenv>=1.0.0
 tqdm>=4.66.0
+
+# Web UI
+flask>=3.0.0

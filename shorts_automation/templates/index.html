@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>쇼츠 자동화 파이프라인</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0d0d0d;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+
+    /* Header */
+    header { text-align: center; padding: 36px 0 28px; }
+    header h1 { font-size: 26px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+    header p  { color: #666; font-size: 14px; margin-top: 8px; }
+
+    /* Step indicator */
+    .steps-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 28px;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #444;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .step-item.active { color: #ff4444; }
+    .step-item.done   { color: #888; }
+    .step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: #222;
+      border: 2px solid #333;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-item.active .step-num { background: #ff4444; border-color: #ff4444; color: #fff; }
+    .step-item.done   .step-num { background: #333; border-color: #555; color: #888; }
+    .step-divider { width: 40px; height: 2px; background: #222; margin: 0 4px; flex-shrink: 0; }
+    .step-divider.done { background: #444; }
+
+    /* Card */
+    .card {
+      background: #161616;
+      border: 1px solid #222;
+      border-radius: 14px;
+      padding: 28px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 17px; font-weight: 600; color: #fff;
+      margin-bottom: 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    /* Form */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .form-grid.full { grid-template-columns: 1fr; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; color: #777; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .field input {
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      color: #e0e0e0;
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.15s;
+    }
+    .field input:focus { outline: none; border-color: #ff4444; }
+    .field input::placeholder { color: #444; }
+    .duration-row { display: flex; align-items: center; gap: 8px; }
+    .duration-row span { color: #555; font-size: 13px; }
+
+    /* Buttons */
+    .btn {
+      padding: 11px 24px; border: none; border-radius: 8px;
+      cursor: pointer; font-size: 14px; font-weight: 600;
+      transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary   { background: #ff4444; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #e03333; }
+    .btn-secondary { background: #222; color: #aaa; border: 1px solid #333; }
+    .btn-secondary:hover:not(:disabled) { background: #2a2a2a; }
+    .btn-ghost { background: none; border: 1px solid #333; color: #777; font-size: 13px; padding: 8px 16px; border-radius: 7px; cursor: pointer; transition: 0.15s; }
+    .btn-ghost:hover { border-color: #555; color: #aaa; }
+
+    /* Video grid */
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .video-card {
+      background: #1a1a1a;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .video-card:hover { border-color: #444; transform: translateY(-2px); }
+    .video-card.selected { border-color: #ff4444; }
+    .video-card img {
+      width: 100%; aspect-ratio: 16/9; object-fit: cover;
+      display: block; background: #111;
+    }
+    .video-card .info { padding: 10px 12px 12px; }
+    .video-card .v-title {
+      font-size: 12px; line-height: 1.5; color: #ccc;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .video-card .v-meta { margin-top: 6px; font-size: 11px; color: #555; display: flex; gap: 6px; flex-wrap: wrap; }
+    .video-card .v-views { color: #ff7777; font-weight: 600; }
+
+    /* Action bar */
+    .action-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .action-bar-right { display: flex; align-items: center; gap: 10px; }
+
+    /* Progress */
+    .progress-wrap { padding: 8px 0 4px; }
+    .progress-track { background: #222; border-radius: 100px; height: 8px; overflow: hidden; }
+    .progress-fill  {
+      height: 100%; border-radius: 100px;
+      background: linear-gradient(90deg, #ff4444, #ff7744);
+      transition: width 0.5s ease;
+    }
+    .progress-label { margin-top: 12px; font-size: 14px; color: #999; text-align: center; }
+    .progress-pct   { font-size: 28px; font-weight: 700; color: #fff; text-align: center; margin: 16px 0 8px; }
+
+    /* Result */
+    .result-video {
+      width: 100%; max-width: 360px;
+      border-radius: 10px; display: block; margin: 0 auto 20px;
+    }
+
+    /* Error */
+    .error-box {
+      background: #1e0a0a; border: 1px solid #5a1a1a;
+      border-radius: 8px; padding: 14px 16px; color: #ff8888;
+      font-size: 13px; line-height: 1.6;
+    }
+
+    /* Badge */
+    .badge {
+      display: inline-block; padding: 2px 9px; border-radius: 100px;
+      font-size: 11px; font-weight: 600;
+      background: #ff444422; color: #ff7777;
+    }
+
+    /* Step pages */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* Empty state */
+    .empty { text-align: center; padding: 40px; color: #555; font-size: 14px; }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .step-item span { display: none; }
+      .step-divider { width: 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>🎬 쇼츠 자동화 파이프라인</h1>
+    <p>조회수가 검증된 해외 영상 → AI 대본 재작성 → 한국어 쇼츠 자동 생성</p>
+  </header>
+
+  <!-- Step navigation -->
+  <nav class="steps-nav" id="steps-nav">
+    <div class="step-item active" id="nav-1">
+      <div class="step-num">1</div><span>영상 검색</span>
+    </div>
+    <div class="step-divider" id="div-1"></div>
+    <div class="step-item" id="nav-2">
+      <div class="step-num">2</div><span>영상 선택</span>
+    </div>
+    <div class="step-divider" id="div-2"></div>
+    <div class="step-item" id="nav-3">
+      <div class="step-num">3</div><span>원본 탐색</span>
+    </div>
+    <div class="step-divider" id="div-3"></div>
+    <div class="step-item" id="nav-4">
+      <div class="step-num">4</div><span>생성 중</span>
+    </div>
+  </nav>
+
+  <!-- ── Page 1: Search form ─────────────────────────────────── -->
+  <div class="page active" id="page-1">
+    <div class="card">
+      <div class="card-title">🔍 영상 검색 조건 입력</div>
+
+      <div class="form-grid full">
+        <div class="field">
+          <label>검색 키워드</label>
+          <input type="text" id="keyword"
+            placeholder="예: dog rescue, amazing kindness, sports incredible moment"
+            onkeydown="if(event.key==='Enter') doSearch()" />
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label>업로드 시작일 (기본: 6개월 전)</label>
+          <input type="date" id="start-date" />
+        </div>
+        <div class="field">
+          <label>업로드 종료일 (기본: 3개월 전)</label>
+          <input type="date" id="end-date" />
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label>최소 조회수</label>
+          <input type="number" id="min-views" value="1000000" placeholder="1000000" />
+        </div>
+        <div class="field">
+          <label>영상 길이 (초)</label>
+          <div class="duration-row">
+            <input type="number" id="min-dur" value="30" placeholder="30" style="flex:1" />
+            <span>~</span>
+            <input type="number" id="max-dur" value="180" placeholder="180" style="flex:1" />
+          </div>
+        </div>
+      </div>
+
+      <div id="search-error" class="error-box" style="display:none; margin-bottom:16px;"></div>
+
+      <button class="btn btn-primary" id="search-btn" onclick="doSearch()">
+        🔍 검색하기
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Page 2: Search results ─────────────────────────────── -->
+  <div class="page" id="page-2">
+    <div class="card">
+      <div class="card-title">
+        📋 영상 선택
+        <span class="badge" id="result-count"></span>
+      </div>
+      <p style="font-size:13px; color:#666; margin-bottom:18px;">
+        썸네일을 클릭해서 원하는 영상을 선택하세요.
+      </p>
+      <div class="video-grid" id="search-results"></div>
+      <div class="action-bar">
+        <button class="btn btn-secondary" onclick="goPage(1)">← 다시 검색</button>
+        <button class="btn btn-primary" id="select-btn" onclick="goToOriginal()" disabled>
+          원본 탐색 →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page 3: Original candidates ───────────────────────── -->
+  <div class="page" id="page-3">
+    <div class="card">
+      <div class="card-title">🔎 원본 영상 탐색</div>
+      <p style="font-size:13px; color:#666; margin-bottom:18px;">
+        선택한 영상보다 오래된 원본 영상을 선택하거나, 건너뛰고 선택한 영상을 그대로 사용할 수 있어요.
+      </p>
+      <div id="original-loading" class="empty">원본 후보 탐색 중...</div>
+      <div class="video-grid" id="original-results" style="display:none"></div>
+      <div class="action-bar" id="original-actions" style="display:none">
+        <button class="btn btn-secondary" onclick="goPage(2)">← 뒤로</button>
+        <div class="action-bar-right">
+          <button class="btn-ghost" onclick="skipOriginal()">건너뛰기 (선택 영상 그대로)</button>
+          <button class="btn btn-primary" id="original-btn" onclick="confirmOriginal()" disabled>
+            이 원본으로 진행 →
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page 4: Processing + Result ───────────────────────── -->
+  <div class="page" id="page-4">
+    <div class="card" id="processing-card">
+      <div class="card-title">⚙️ 영상 생성 중</div>
+      <div class="progress-pct" id="progress-pct">0%</div>
+      <div class="progress-wrap">
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="progress-label" id="progress-msg">시작 중...</div>
+      <div id="process-error" class="error-box" style="display:none; margin-top:20px;"></div>
+    </div>
+
+    <div class="card" id="result-card" style="display:none; text-align:center;">
+      <div class="card-title" style="justify-content:center;">✅ 완성!</div>
+      <video class="result-video" id="result-video" controls></video>
+      <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+        <a id="download-link" class="btn btn-primary" download>⬇️ 영상 다운로드</a>
+        <button class="btn btn-secondary" onclick="resetAll()">🔄 새 영상 만들기</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── 상태 ────────────────────────────────────────────────────────
+  let selectedVideo  = null;
+  let finalVideo     = null;
+  let pollTimer      = null;
+
+  // 기본 날짜 설정
+  (() => {
+    const now = new Date();
+    const fmt = d => d.toISOString().split('T')[0];
+    const m6 = new Date(now); m6.setMonth(m6.getMonth() - 6);
+    const m3 = new Date(now); m3.setMonth(m3.getMonth() - 3);
+    document.getElementById('start-date').value = fmt(m6);
+    document.getElementById('end-date').value   = fmt(m3);
+  })();
+
+  // ── 유틸 ────────────────────────────────────────────────────────
+  function fmtViews(n) {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000)     return Math.round(n / 1000) + 'K';
+    return String(n);
+  }
+  function fmtDur(sec) {
+    return `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
+  }
+  function thumb(vid) {
+    return `https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
+  }
+
+  // ── 페이지 전환 ──────────────────────────────────────────────────
+  function goPage(n) {
+    document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+    document.getElementById(`page-${n}`).classList.add('active');
+
+    for (let i = 1; i <= 4; i++) {
+      const nav = document.getElementById(`nav-${i}`);
+      nav.className = 'step-item' + (i === n ? ' active' : i < n ? ' done' : '');
+    }
+    for (let i = 1; i <= 3; i++) {
+      const div = document.getElementById(`div-${i}`);
+      div.className = 'step-divider' + (i < n ? ' done' : '');
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // ── 비디오 카드 렌더링 ───────────────────────────────────────────
+  function renderCards(containerId, videos, onSelect) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    if (!videos.length) {
+      container.innerHTML = '<div class="empty">결과가 없습니다.</div>';
+      return;
+    }
+    videos.forEach(v => {
+      const card = document.createElement('div');
+      card.className = 'video-card';
+      card.innerHTML = `
+        <img src="${thumb(v.video_id)}" alt=""
+          onerror="this.style.background='#111';this.removeAttribute('src')">
+        <div class="info">
+          <div class="v-title">${v.title}</div>
+          <div class="v-meta">
+            <span class="v-views">${fmtViews(v.views)}</span>
+            <span>${v.upload_date}</span>
+            ${v.duration ? `<span>${fmtDur(v.duration)}</span>` : ''}
+          </div>
+        </div>`;
+      card.addEventListener('click', () => {
+        container.querySelectorAll('.video-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        onSelect(v);
+      });
+      container.appendChild(card);
+    });
+  }
+
+  // ── Step 1: 검색 ────────────────────────────────────────────────
+  async function doSearch() {
+    const keyword = document.getElementById('keyword').value.trim();
+    if (!keyword) { alert('키워드를 입력해주세요.'); return; }
+
+    const btn = document.getElementById('search-btn');
+    btn.textContent = '검색 중...'; btn.disabled = true;
+    document.getElementById('search-error').style.display = 'none';
+
+    try {
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword,
+          start_date:   document.getElementById('start-date').value,
+          end_date:     document.getElementById('end-date').value,
+          min_views:    parseInt(document.getElementById('min-views').value) || 100_000,
+          min_duration: parseInt(document.getElementById('min-dur').value)   || 30,
+          max_duration: parseInt(document.getElementById('max-dur').value)   || 180,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (!data.results.length) throw new Error('조건에 맞는 영상이 없습니다. 조건을 완화해보세요.');
+
+      selectedVideo = null;
+      document.getElementById('select-btn').disabled = true;
+      document.getElementById('result-count').textContent = `${data.results.length}개`;
+
+      renderCards('search-results', data.results, v => {
+        selectedVideo = v;
+        document.getElementById('select-btn').disabled = false;
+      });
+      goPage(2);
+    } catch (e) {
+      const el = document.getElementById('search-error');
+      el.textContent = e.message; el.style.display = 'block';
+    } finally {
+      btn.textContent = '🔍 검색하기'; btn.disabled = false;
+    }
+  }
+
+  // ── Step 2 → 3: 원본 탐색 ────────────────────────────────────────
+  async function goToOriginal() {
+    if (!selectedVideo) return;
+    goPage(3);
+
+    document.getElementById('original-loading').style.display = 'block';
+    document.getElementById('original-results').style.display = 'none';
+    document.getElementById('original-actions').style.display = 'none';
+    finalVideo = null;
+    document.getElementById('original-btn').disabled = true;
+
+    try {
+      const res = await fetch('/api/find-original', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video: selectedVideo }),
+      });
+      const data = await res.json();
+
+      document.getElementById('original-loading').style.display = 'none';
+      document.getElementById('original-results').style.display = 'grid';
+      document.getElementById('original-actions').style.display = 'flex';
+
+      if (!data.candidates || !data.candidates.length) {
+        document.getElementById('original-results').innerHTML =
+          '<div class="empty">원본 후보를 찾지 못했습니다. 건너뛰기를 눌러주세요.</div>';
+        return;
+      }
+
+      renderCards('original-results', data.candidates, v => {
+        finalVideo = v;
+        document.getElementById('original-btn').disabled = false;
+      });
+    } catch (e) {
+      document.getElementById('original-loading').innerHTML =
+        `<div class="error-box">${e.message}</div>`;
+      document.getElementById('original-actions').style.display = 'flex';
+    }
+  }
+
+  function skipOriginal()    { finalVideo = selectedVideo; startProcessing(); }
+  function confirmOriginal() { if (finalVideo) startProcessing(); }
+
+  // ── Step 4: 영상 생성 ────────────────────────────────────────────
+  async function startProcessing() {
+    goPage(4);
+    document.getElementById('result-card').style.display = 'none';
+    document.getElementById('process-error').style.display = 'none';
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('progress-pct').textContent = '0%';
+    document.getElementById('progress-msg').textContent = '시작 중...';
+
+    const res = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video: finalVideo }),
+    });
+    const { job_id } = await res.json();
+
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      const r = await fetch(`/api/status/${job_id}`);
+      const job = await r.json();
+
+      document.getElementById('progress-fill').style.width = job.progress + '%';
+      document.getElementById('progress-pct').textContent = job.progress + '%';
+      document.getElementById('progress-msg').textContent = job.message || '';
+
+      if (job.status === 'done') {
+        clearInterval(pollTimer);
+        showResult(job.result);
+      } else if (job.status === 'error') {
+        clearInterval(pollTimer);
+        const el = document.getElementById('process-error');
+        el.textContent = '오류: ' + job.message;
+        el.style.display = 'block';
+      }
+    }, 2000);
+  }
+
+  function showResult(filename) {
+    const url = `/output/${filename}`;
+    document.getElementById('result-video').src = url;
+    document.getElementById('download-link').href = url;
+    document.getElementById('download-link').download = filename;
+    document.getElementById('result-card').style.display = 'block';
+    document.getElementById('progress-msg').textContent = '완성!';
+  }
+
+  function resetAll() {
+    selectedVideo = finalVideo = null;
+    if (pollTimer) clearInterval(pollTimer);
+    goPage(1);
+  }
+</script>
+</body>
+</html>
