@@ -15,7 +15,7 @@ from typing import List, Optional
 
 from loguru import logger
 
-from .browser import managed_browser
+from .browser import BrowserManager, managed_browser
 from .config_loader import AppConfig, load_config, load_keywords
 from .deduplicator import build_seller_master, deduplicate_products
 from .exporter import DataExporter
@@ -95,6 +95,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=None,
         help="이미 수집된 상품은 건너뜀",
+    )
+
+    # 세션 워밍업
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
+        help="브라우저를 열고 쿠팡 세션을 수동으로 확립한 후 크롤링 시작",
     )
 
     # 실행 모드
@@ -299,6 +306,33 @@ async def run_full_pipeline(
 # 진입점
 # ──────────────────────────────────────────────────────────────────────────────
 
+async def run_warmup(config: AppConfig) -> None:
+    """브라우저를 열고 사용자가 쿠팡 세션을 수동으로 확립하도록 안내한다."""
+    print("\n" + "=" * 60)
+    print("  쿠팡 세션 워밍업 모드")
+    print("=" * 60)
+    print("  브라우저가 열립니다.")
+    print("  1. 브라우저에서 coupang.com 에 접속하세요.")
+    print("  2. 로그인 후 검색 결과가 정상으로 보이면 OK 입니다.")
+    print("  3. 이 터미널로 돌아와 Enter 를 누르면 크롤링이 시작됩니다.")
+    print("=" * 60 + "\n")
+
+    manager = BrowserManager(config)
+    await manager.start()
+
+    try:
+        async with manager.new_page() as page:
+            await page.goto("https://www.coupang.com", wait_until="load",
+                            timeout=config.timeout_sec * 1000)
+            logger.info("[워밍업] 브라우저에서 coupang.com 을 확인하세요.")
+            logger.info("[워밍업] 세션 확립 후 이 터미널에서 Enter 를 누르세요.")
+            await asyncio.get_event_loop().run_in_executor(None, input, "  ▶ Enter 를 누르면 크롤링을 시작합니다... ")
+    finally:
+        await manager.stop()
+
+    logger.info("[워밍업] 완료. 세션이 data/chrome_profile 에 저장됨.")
+
+
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -328,6 +362,8 @@ def main() -> None:
         logger.info(f"[메인] 키워드 {len(keywords)}개 로드됨")
 
     try:
+        if args.warmup:
+            asyncio.run(run_warmup(config))
         asyncio.run(run_full_pipeline(config, keywords, args))
     except KeyboardInterrupt:
         logger.warning("[메인] 사용자에 의해 중단됨")
