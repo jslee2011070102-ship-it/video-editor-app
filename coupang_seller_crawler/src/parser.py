@@ -61,14 +61,19 @@ COUPANG_BASE = "https://www.coupang.com"
 SEARCH_PRODUCT_SELECTORS = [
     "li.search-product",
     "li[class*='search-product']",
+    "li[class*='baby-product']",
     "div.search-product-wrap li",
     "ul.search-product-list li",
+    "ul[class*='product-list'] li",
+    "div[class*='product-wrap'] li",
+    "ul li[class*='product']",
 ]
 
 # 상품 링크 선택자
 PRODUCT_LINK_SELECTORS = [
     "a.search-product-link",
     "a[class*='product-link']",
+    "a[class*='baby-product-link']",
     "a[href*='/vp/products/']",
 ]
 
@@ -78,6 +83,8 @@ PRODUCT_NAME_SELECTORS = [
     "div[class*='product-name']",
     "span.product-name",
     "dt.adUnit-string",
+    "div[class*='name']",
+    "span[class*='name']",
 ]
 
 
@@ -91,7 +98,7 @@ def parse_search_page(
     soup = BeautifulSoup(html, "lxml")
     products: List[ProductItem] = []
 
-    # 상품 카드 목록 찾기 (여러 선택자 시도)
+    # 1차: CSS 선택자로 카드 목록 찾기
     product_cards: List[Tag] = []
     for selector in SEARCH_PRODUCT_SELECTORS:
         cards = soup.select(selector)
@@ -100,8 +107,16 @@ def parse_search_page(
             logger.debug(f"검색결과 선택자 적중: '{selector}' ({len(cards)}개)")
             break
 
+    # 2차 fallback: /vp/products/ 링크를 직접 수집 후 부모 li/div 로 역추적
+    if not product_cards:
+        logger.debug("선택자 실패 → /vp/products/ 링크 직접 탐색으로 전환")
+        product_cards = _fallback_find_cards(soup)
+
     if not product_cards:
         logger.warning(f"검색결과 카드를 찾지 못했습니다. keyword={keyword}, page={page_num}")
+        # 디버그용: 페이지 제목과 ul/li 구조 출력
+        title = soup.find("title")
+        logger.debug(f"페이지 제목: {title.get_text() if title else 'N/A'}")
         return products
 
     for rank, card in enumerate(product_cards, start=1):
@@ -113,6 +128,26 @@ def parse_search_page(
             logger.warning(f"상품 카드 파싱 오류 (rank={rank}): {exc}")
 
     return products
+
+
+def _fallback_find_cards(soup: BeautifulSoup) -> List[Tag]:
+    """CSS 선택자 실패 시 /vp/products/ 링크로 상품 카드를 역추적한다."""
+    seen_urls: set = set()
+    cards: List[Tag] = []
+
+    for a_tag in soup.find_all("a", href=re.compile(r"/vp/products/\d+")):
+        href = a_tag.get("href", "")
+        if href in seen_urls:
+            continue
+        seen_urls.add(href)
+
+        # 가장 가까운 li 또는 div 부모를 카드로 사용
+        parent = a_tag.find_parent("li") or a_tag.find_parent("div")
+        if parent and parent not in cards:
+            cards.append(parent)
+
+    logger.debug(f"fallback 탐색: {len(cards)}개 카드 발견")
+    return cards
 
 
 def _parse_single_product_card(

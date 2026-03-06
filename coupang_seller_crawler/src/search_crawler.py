@@ -19,7 +19,7 @@ from tenacity import (
 from .browser import BrowserManager, random_delay
 from .config_loader import AppConfig
 from .parser import ProductItem, parse_search_page
-from .utils import make_coupang_search_url, now_iso
+from .utils import ensure_dir, make_coupang_search_url, now_iso, safe_filename
 
 
 class SearchCrawler:
@@ -126,6 +126,13 @@ class SearchCrawler:
                     return []
 
                 html = await page.content()
+
+                # 검색결과 HTML 스냅샷 저장 (파서 디버깅용)
+                if self.config.save_html_snapshot:
+                    raw_dir = ensure_dir(self.config.raw_dir)
+                    snap_name = f"search_{safe_filename(keyword)}_p{page_num}.html"
+                    (raw_dir / snap_name).write_text(html, encoding="utf-8", errors="replace")
+
                 products = parse_search_page(html, keyword, page_num)
                 return products
 
