@@ -13,6 +13,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import OUTPUT_DIR
 
+# 사용 가능한 한국어 폰트 목록 (시스템에 따라 다를 수 있음)
+AVAILABLE_FONTS = {
+    'NanumGothic':      'NanumGothic',
+    'NanumBarunGothic': 'NanumBarunGothic',
+    'NanumMyeongjo':    'NanumMyeongjo',
+    'UnDotum':          'UnDotum',
+    'NotoSansCJK':      'Noto Sans CJK KR',
+    'DejaVu':           'DejaVu Sans',
+}
+DEFAULT_FONT = 'NanumGothic'
+
 
 # ─── FFprobe 유틸 ──────────────────────────────────────────────────────────
 
@@ -34,38 +45,57 @@ def get_media_duration(path: str) -> float:
     return 0.0
 
 
-# ─── 자막 타이밍 생성 ──────────────────────────────────────────────────────
+# ─── 자막 타이밍 생성 (폴백용 - edge-tts SRT 없을 때만 사용) ──────────────
+
+CHARS_PER_LINE = 18  # 한 줄 최대 글자 수
+
+def _wrap_to_two_lines(text: str) -> str:
+    """긴 텍스트를 최대 2줄로 분리"""
+    if len(text) <= CHARS_PER_LINE:
+        return text
+    mid = len(text) // 2
+    # 공백에서 분리 시도
+    for j in range(mid, 0, -1):
+        if text[j] == ' ':
+            return text[:j] + '\n' + text[j + 1:]
+    for j in range(mid, len(text)):
+        if text[j] == ' ':
+            return text[:j] + '\n' + text[j + 1:]
+    return text[:mid] + '\n' + text[mid:]
+
 
 def split_into_subtitles(script: str, total_duration: float) -> list[dict]:
     """
     스크립트를 문장 단위로 쪼개고 글자수 비례로 타임스탬프 부여.
     반환: [{'start': float, 'end': float, 'text': str}, ...]
     """
-    # 문장 분리 (마침표·느낌표·물음표 뒤, 또는 줄바꿈 기준)
     sentences = re.split(r'(?<=[.!?。！？])\s+|\n+', script.strip())
     sentences = [s.strip() for s in sentences if s.strip()]
 
     if not sentences:
-        return [{'start': 0.0, 'end': total_duration, 'text': script.strip()}]
+        return [{'start': 0.0, 'end': total_duration, 'text': _wrap_to_two_lines(script.strip())}]
 
     total_chars = sum(len(s) for s in sentences)
     subtitles = []
     current = 0.0
     for sentence in sentences:
-        ratio = len(sentence) / total_chars if total_chars else 1 / len(sentences)
+        ratio   = len(sentence) / total_chars if total_chars else 1 / len(sentences)
         duration = total_duration * ratio
-        # 최소 0.8초, 최대 5초 클램핑
         duration = max(0.8, min(5.0, duration))
-        subtitles.append({'start': current, 'end': current + duration, 'text': sentence})
+        subtitles.append({
+            'start': current,
+            'end':   current + duration,
+            'text':  _wrap_to_two_lines(sentence),
+        })
         current += duration
 
     return subtitles
 
 
 def _srt_time(seconds: float) -> str:
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
+    h  = int(seconds // 3600)
+    m  = int((seconds % 3600) // 60)
+    s  = int(seconds % 60)
     ms = int((seconds % 1) * 1000)
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
@@ -80,8 +110,7 @@ def write_srt(subtitles: list[dict], path: str):
 
 # ─── FFmpeg 파이프라인 ─────────────────────────────────────────────────────
 
-def _build_subtitle_filter(srt_path: str, font: str = 'NanumGothic') -> str:
-    # FFmpeg subtitles 필터 경로에서 특수문자 이스케이프 (콜론 등)
+def _build_subtitle_filter(srt_path: str, font: str = DEFAULT_FONT) -> str:
     escaped = srt_path.replace('\\', '/').replace(':', r'\:')
     style = (
         f"FontName={font},FontSize=18,"
@@ -98,8 +127,16 @@ def _ffmpeg(cmd: list[str]) -> bool:
     return result.returncode == 0
 
 
-def run_step7(video_path: str, audio_path: str, script: str, video_id: str) -> str:
+def run_step7(
+    video_path: str,
+    audio_path: str,
+    script: str,
+    video_id: str,
+    srt_path: str | None = None,   # edge-tts가 생성한 싱크 SRT (있으면 우선 사용)
+    font: str = DEFAULT_FONT,
+) -> str:
     print(f"\n=== 11~12단계: 영상 + 음성 합치기 + 자막 burn-in ===\n")
+    print(f"폰트: {font}")
 
     audio_duration = get_media_duration(audio_path)
     if audio_duration == 0:
@@ -122,17 +159,23 @@ def run_step7(video_path: str, audio_path: str, script: str, video_id: str) -> s
     if not ok:
         return ''
 
-    # ── 2단계: 자막 SRT 생성 ──
-    subtitles = split_into_subtitles(script, audio_duration)
-    srt_path = str(OUTPUT_DIR / f"{video_id}.srt")
-    write_srt(subtitles, srt_path)
-    print(f"자막 파일 생성: {Path(srt_path).name}  ({len(subtitles)}개 구간)")
+    # ── 2단계: 자막 SRT 결정 ──
+    generated_srt = False
+    if srt_path and Path(srt_path).exists() and Path(srt_path).stat().st_size > 0:
+        print(f"edge-tts 싱크 자막 사용: {Path(srt_path).name}")
+    else:
+        # 폴백: 글자수 비례 타이밍
+        srt_path = str(OUTPUT_DIR / f"{video_id}.srt")
+        subtitles = split_into_subtitles(script, audio_duration)
+        write_srt(subtitles, srt_path)
+        print(f"자막 파일 생성 (폴백): {Path(srt_path).name}  ({len(subtitles)}개 구간)")
+        generated_srt = True
 
     # ── 3단계: 영상 + TTS 오디오 + 자막 burn-in ──
     final_path = str(OUTPUT_DIR / f"{video_id}_final.mp4")
     print("최종 합성 중 (영상 + TTS + 자막 burn-in)...")
 
-    sub_filter = _build_subtitle_filter(srt_path, font='NanumGothic')
+    sub_filter = _build_subtitle_filter(srt_path, font=font)
     ok = _ffmpeg([
         'ffmpeg', '-y',
         '-i', trimmed,
@@ -145,8 +188,8 @@ def run_step7(video_path: str, audio_path: str, script: str, video_id: str) -> s
     ])
 
     if not ok:
-        # 폴백: 한국어 전용 폰트 없이 기본 폰트로 재시도
-        print("  폰트 오류 가능성, 기본 폰트로 재시도...")
+        # 폴백: DejaVu 폰트로 재시도
+        print("  폰트 오류 가능성, DejaVu Sans로 재시도...")
         sub_filter_fallback = _build_subtitle_filter(srt_path, font='DejaVu Sans')
         ok = _ffmpeg([
             'ffmpeg', '-y',

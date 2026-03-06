@@ -23,30 +23,20 @@
 
     /* Step indicator */
     .steps-nav {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0;
-      margin-bottom: 28px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 0; margin-bottom: 28px;
     }
     .step-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #444;
-      font-size: 13px;
-      font-weight: 500;
+      display: flex; align-items: center; gap: 8px;
+      color: #444; font-size: 13px; font-weight: 500;
     }
     .step-item.active { color: #ff4444; }
     .step-item.done   { color: #888; }
     .step-num {
-      width: 28px; height: 28px;
-      border-radius: 50%;
-      background: #222;
-      border: 2px solid #333;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #222; border: 2px solid #333;
       display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 700;
-      flex-shrink: 0;
+      font-size: 12px; font-weight: 700; flex-shrink: 0;
     }
     .step-item.active .step-num { background: #ff4444; border-color: #ff4444; color: #fff; }
     .step-item.done   .step-num { background: #333; border-color: #555; color: #888; }
@@ -55,34 +45,28 @@
 
     /* Card */
     .card {
-      background: #161616;
-      border: 1px solid #222;
-      border-radius: 14px;
-      padding: 28px;
-      margin-bottom: 16px;
+      background: #161616; border: 1px solid #222;
+      border-radius: 14px; padding: 28px; margin-bottom: 16px;
     }
     .card-title {
       font-size: 17px; font-weight: 600; color: #fff;
-      margin-bottom: 20px;
-      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
     }
 
     /* Form */
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     .form-grid.full { grid-template-columns: 1fr; }
+    .form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
     .field { display: flex; flex-direction: column; gap: 6px; }
     .field label { font-size: 12px; color: #777; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-    .field input {
-      background: #1e1e1e;
-      border: 1px solid #2a2a2a;
-      color: #e0e0e0;
-      padding: 11px 14px;
-      border-radius: 8px;
-      font-size: 14px;
-      transition: border-color 0.15s;
+    .field input, .field select {
+      background: #1e1e1e; border: 1px solid #2a2a2a;
+      color: #e0e0e0; padding: 11px 14px; border-radius: 8px;
+      font-size: 14px; transition: border-color 0.15s;
     }
-    .field input:focus { outline: none; border-color: #ff4444; }
+    .field input:focus, .field select:focus { outline: none; border-color: #ff4444; }
     .field input::placeholder { color: #444; }
+    .field select option { background: #1e1e1e; }
     .duration-row { display: flex; align-items: center; gap: 8px; }
     .duration-row span { color: #555; font-size: 13px; }
 
@@ -104,23 +88,38 @@
     .video-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-      gap: 14px;
-      margin-bottom: 20px;
+      gap: 14px; margin-bottom: 20px;
     }
     .video-card {
-      background: #1a1a1a;
-      border: 2px solid transparent;
-      border-radius: 10px;
-      overflow: hidden;
-      cursor: pointer;
+      background: #1a1a1a; border: 2px solid transparent;
+      border-radius: 10px; overflow: hidden; cursor: pointer;
       transition: all 0.15s;
     }
     .video-card:hover { border-color: #444; transform: translateY(-2px); }
     .video-card.selected { border-color: #ff4444; }
-    .video-card img {
+
+    /* 썸네일 + 미리보기 오버레이 */
+    .thumb-wrap { position: relative; }
+    .thumb-wrap img {
       width: 100%; aspect-ratio: 16/9; object-fit: cover;
       display: block; background: #111;
     }
+    .play-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .thumb-wrap:hover .play-overlay { opacity: 1; }
+    .play-btn {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(255,255,255,0.9);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: #111; text-decoration: none;
+      transition: transform 0.1s;
+    }
+    .play-btn:hover { transform: scale(1.1); }
+
     .video-card .info { padding: 10px 12px 12px; }
     .video-card .v-title {
       font-size: 12px; line-height: 1.5; color: #ccc;
@@ -171,8 +170,50 @@
     /* Empty state */
     .empty { text-align: center; padding: 40px; color: #555; font-size: 14px; }
 
+    /* 옵션 카드 */
+    .options-card {
+      background: #111; border: 1px solid #1e1e1e;
+      border-radius: 10px; padding: 20px; margin-bottom: 16px;
+    }
+    .options-title {
+      font-size: 13px; color: #666; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+    }
+
+    /* YouTube 미리보기 모달 */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #161616; border-radius: 14px;
+      padding: 20px; max-width: 720px; width: 90%;
+      position: relative;
+    }
+    .modal-close {
+      position: absolute; top: 12px; right: 14px;
+      background: none; border: none; color: #aaa;
+      font-size: 22px; cursor: pointer; line-height: 1;
+    }
+    .modal-close:hover { color: #fff; }
+    .modal-title {
+      font-size: 14px; color: #ccc; margin-bottom: 14px;
+      padding-right: 30px; line-height: 1.4;
+    }
+    .modal-iframe-wrap {
+      position: relative; padding-bottom: 56.25%;
+      height: 0; overflow: hidden; border-radius: 8px;
+    }
+    .modal-iframe-wrap iframe {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      border: none; border-radius: 8px;
+    }
+
     @media (max-width: 600px) {
-      .form-grid { grid-template-columns: 1fr; }
+      .form-grid, .form-grid.three { grid-template-columns: 1fr; }
       .step-item span { display: none; }
       .step-divider { width: 20px; }
     }
@@ -251,6 +292,42 @@
         🔍 검색하기
       </button>
     </div>
+
+    <!-- TTS / 자막 옵션 -->
+    <div class="options-card">
+      <div class="options-title">⚙️ 생성 옵션</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>TTS 목소리</label>
+          <select id="opt-voice">
+            <option value="female">여성 (SunHi) — 기본</option>
+            <option value="male">남성 (InJoon)</option>
+            <option value="male2">남성 감성 (Hyunsu)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>TTS 속도</label>
+          <select id="opt-speed">
+            <option value="-25">0.75× (느리게)</option>
+            <option value="-10">0.9× (약간 느리게)</option>
+            <option value="0" selected>1.0× (보통)</option>
+            <option value="10">1.1× (약간 빠르게)</option>
+            <option value="25">1.25× (빠르게)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>자막 폰트</label>
+          <select id="opt-font">
+            <option value="NanumGothic" selected>나눔고딕 (기본)</option>
+            <option value="NanumBarunGothic">나눔바른고딕</option>
+            <option value="NanumMyeongjo">나눔명조</option>
+            <option value="UnDotum">은 돋움</option>
+            <option value="NotoSansCJK">Noto Sans CJK</option>
+            <option value="DejaVu">DejaVu Sans</option>
+          </select>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ── Page 2: Search results ─────────────────────────────── -->
@@ -261,7 +338,7 @@
         <span class="badge" id="result-count"></span>
       </div>
       <p style="font-size:13px; color:#666; margin-bottom:18px;">
-        썸네일을 클릭해서 원하는 영상을 선택하세요.
+        썸네일을 클릭해서 영상을 선택하세요. ▶ 버튼으로 미리보기 가능합니다.
       </p>
       <div class="video-grid" id="search-results"></div>
       <div class="action-bar">
@@ -279,6 +356,7 @@
       <div class="card-title">🔎 원본 영상 탐색</div>
       <p style="font-size:13px; color:#666; margin-bottom:18px;">
         선택한 영상보다 오래된 원본 영상을 선택하거나, 건너뛰고 선택한 영상을 그대로 사용할 수 있어요.
+        ▶ 버튼으로 미리보기 가능합니다.
       </p>
       <div id="original-loading" class="empty">원본 후보 탐색 중...</div>
       <div class="video-grid" id="original-results" style="display:none"></div>
@@ -320,6 +398,19 @@
 
 </div>
 
+<!-- ── YouTube 미리보기 모달 ──────────────────────────────────── -->
+<div class="modal-overlay" id="preview-modal" onclick="closeModal(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closePreview()">✕</button>
+    <div class="modal-title" id="modal-title"></div>
+    <div class="modal-iframe-wrap">
+      <iframe id="modal-iframe" allowfullscreen
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">
+      </iframe>
+    </div>
+  </div>
+</div>
+
 <script>
   // ── 상태 ────────────────────────────────────────────────────────
   let selectedVideo  = null;
@@ -353,7 +444,6 @@
   function goPage(n) {
     document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
     document.getElementById(`page-${n}`).classList.add('active');
-
     for (let i = 1; i <= 4; i++) {
       const nav = document.getElementById(`nav-${i}`);
       nav.className = 'step-item' + (i === n ? ' active' : i < n ? ' done' : '');
@@ -364,6 +454,23 @@
     }
     window.scrollTo(0, 0);
   }
+
+  // ── YouTube 미리보기 모달 ─────────────────────────────────────────
+  function openPreview(videoId, title, event) {
+    event.stopPropagation();  // 카드 선택 이벤트 방지
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-iframe').src =
+      `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    document.getElementById('preview-modal').classList.add('open');
+  }
+  function closePreview() {
+    document.getElementById('preview-modal').classList.remove('open');
+    document.getElementById('modal-iframe').src = '';
+  }
+  function closeModal(event) {
+    if (event.target === document.getElementById('preview-modal')) closePreview();
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview(); });
 
   // ── 비디오 카드 렌더링 ───────────────────────────────────────────
   function renderCards(containerId, videos, onSelect) {
@@ -376,9 +483,16 @@
     videos.forEach(v => {
       const card = document.createElement('div');
       card.className = 'video-card';
+
+      const escapedTitle = v.title.replace(/"/g, '&quot;');
       card.innerHTML = `
-        <img src="${thumb(v.video_id)}" alt=""
-          onerror="this.style.background='#111';this.removeAttribute('src')">
+        <div class="thumb-wrap">
+          <img src="${thumb(v.video_id)}" alt=""
+            onerror="this.style.background='#111';this.removeAttribute('src')">
+          <div class="play-overlay">
+            <a class="play-btn" href="#" title="미리보기">▶</a>
+          </div>
+        </div>
         <div class="info">
           <div class="v-title">${v.title}</div>
           <div class="v-meta">
@@ -387,6 +501,13 @@
             ${v.duration ? `<span>${fmtDur(v.duration)}</span>` : ''}
           </div>
         </div>`;
+
+      // 미리보기 버튼
+      card.querySelector('.play-btn').addEventListener('click', e => {
+        openPreview(v.video_id, v.title, e);
+      });
+
+      // 카드 클릭 → 선택
       card.addEventListener('click', () => {
         container.querySelectorAll('.video-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
@@ -491,21 +612,25 @@
     document.getElementById('progress-pct').textContent = '0%';
     document.getElementById('progress-msg').textContent = '시작 중...';
 
+    const voice = document.getElementById('opt-voice').value;
+    const speed = parseInt(document.getElementById('opt-speed').value);
+    const font  = document.getElementById('opt-font').value;
+
     const res = await fetch('/api/process', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video: finalVideo }),
+      body: JSON.stringify({ video: finalVideo, voice, speed, font }),
     });
     const { job_id } = await res.json();
 
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
-      const r = await fetch(`/api/status/${job_id}`);
+      const r   = await fetch(`/api/status/${job_id}`);
       const job = await r.json();
 
       document.getElementById('progress-fill').style.width = job.progress + '%';
-      document.getElementById('progress-pct').textContent = job.progress + '%';
-      document.getElementById('progress-msg').textContent = job.message || '';
+      document.getElementById('progress-pct').textContent  = job.progress + '%';
+      document.getElementById('progress-msg').textContent  = job.message || '';
 
       if (job.status === 'done') {
         clearInterval(pollTimer);
@@ -521,11 +646,11 @@
 
   function showResult(filename) {
     const url = `/output/${filename}`;
-    document.getElementById('result-video').src = url;
+    document.getElementById('result-video').src   = url;
     document.getElementById('download-link').href = url;
     document.getElementById('download-link').download = filename;
     document.getElementById('result-card').style.display = 'block';
-    document.getElementById('progress-msg').textContent = '완성!';
+    document.getElementById('progress-msg').textContent  = '완성!';
   }
 
   function resetAll() {

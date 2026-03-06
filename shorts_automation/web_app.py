@@ -19,8 +19,8 @@ from step2_original import search_original_candidates
 from step3_download import run_step3
 from step4_analyze import run_step4
 from step5_clip_edit import run_step5
-from step6_tts import run_step6
-from step7_merge import run_step7
+from step6_tts import run_step6, VOICES, VOICE_LABELS
+from step7_merge import run_step7, AVAILABLE_FONTS, DEFAULT_FONT
 
 app = Flask(__name__)
 
@@ -30,13 +30,17 @@ jobs: dict = {}
 
 # ─── 파이프라인 백그라운드 실행 ────────────────────────────────────────────
 
-def _run_pipeline(job_id: str, video: dict):
+def _run_pipeline(job_id: str, video: dict, options: dict):
     def upd(message: str, progress: int):
         jobs[job_id].update(status='running', message=message, progress=progress)
         print(f"[{job_id}] {progress}% - {message}")
 
     jobs[job_id] = {'status': 'running', 'progress': 0, 'message': '시작 중...'}
     video_id = video['video_id']
+
+    voice = options.get('voice', 'female')
+    speed = int(options.get('speed', 0))
+    font  = options.get('font', DEFAULT_FONT)
 
     try:
         upd('영상 다운로드 + 자막 추출 중...', 10)
@@ -53,21 +57,21 @@ def _run_pipeline(job_id: str, video: dict):
         upd('영상 클립 기승전결 재편집 중...', 55)
         rearranged = run_step5(dl['video_path'], analysis, video_id)
 
-        upd('gTTS 한국어 음성 생성 중...', 70)
-        audio = run_step6(script, video_id)
+        upd(f'TTS 음성 생성 중... (목소리: {VOICE_LABELS.get(voice, voice)})', 70)
+        audio, srt = run_step6(script, video_id, voice=voice, speed=speed)
         if not audio:
             raise RuntimeError('TTS 음성 생성에 실패했습니다.')
 
         upd('영상 + 음성 + 자막 최종 합성 중...', 83)
-        final = run_step7(rearranged, audio, script, video_id)
+        final = run_step7(rearranged, audio, script, video_id, srt_path=srt, font=font)
         if not final:
             raise RuntimeError('최종 영상 합성에 실패했습니다.')
 
         jobs[job_id] = {
-            'status': 'done',
+            'status':   'done',
             'progress': 100,
-            'message': '완성!',
-            'result': Path(final).name,
+            'message':  '완성!',
+            'result':   Path(final).name,
         }
 
     except Exception as e:
@@ -79,7 +83,10 @@ def _run_pipeline(job_id: str, video: dict):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html',
+                           voices=VOICE_LABELS,
+                           fonts=list(AVAILABLE_FONTS.keys()),
+                           default_font=DEFAULT_FONT)
 
 
 @app.route('/api/search', methods=['POST'])
@@ -87,11 +94,11 @@ def api_search():
     data = request.json or {}
     try:
         start = datetime.strptime(data['start_date'], '%Y-%m-%d').replace(tzinfo=timezone.utc)
-        end = datetime.strptime(data['end_date'], '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        end   = datetime.strptime(data['end_date'],   '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except (KeyError, ValueError):
-        now = datetime.now(timezone.utc)
+        now   = datetime.now(timezone.utc)
         start = now - timedelta(days=180)
-        end = now - timedelta(days=90)
+        end   = now - timedelta(days=90)
 
     try:
         results = search_videos(
@@ -119,9 +126,15 @@ def api_find_original():
 
 @app.route('/api/process', methods=['POST'])
 def api_process():
-    video = (request.json or {}).get('video', {})
+    body    = request.json or {}
+    video   = body.get('video', {})
+    options = {
+        'voice': body.get('voice', 'female'),
+        'speed': body.get('speed', 0),
+        'font':  body.get('font', DEFAULT_FONT),
+    }
     job_id = uuid.uuid4().hex[:8]
-    t = threading.Thread(target=_run_pipeline, args=(job_id, video), daemon=True)
+    t = threading.Thread(target=_run_pipeline, args=(job_id, video, options), daemon=True)
     t.start()
     return jsonify({'job_id': job_id})
 
