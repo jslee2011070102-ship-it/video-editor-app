@@ -1,0 +1,42 @@
+# 쿠팡 판매자 크롤러 설정 파일
+
+# 크롤링 설정
+max_pages_per_keyword: 30
+headless: true
+min_delay_sec: 2
+max_delay_sec: 5
+retry_count: 3
+concurrency: 2
+timeout_sec: 25
+
+# 저장 옵션
+save_html_snapshot: true
+export_csv: true
+export_excel: true
+export_sqlite: true
+
+# 실행 모드
+resume_mode: true
+
+# 브라우저 설정
+browser_type: chromium       # chromium, firefox, webkit
+user_agent: ""               # 빈 문자열이면 기본값 사용
+viewport_width: 1280
+viewport_height: 800
+
+# 데이터 저장 경로
+data_dir: data
+raw_dir: data/raw
+processed_dir: data/processed
+exports_dir: data/exports
+logs_dir: data/logs
+
+# SQLite 설정
+sqlite_db_name: coupang_sellers.db
+
+# 로그 설정
+log_level: INFO              # DEBUG, INFO, WARNING, ERROR
+log_to_file: true
+
+# 수집 제한 (0이면 무제한)
+limit_products_per_keyword: 0
