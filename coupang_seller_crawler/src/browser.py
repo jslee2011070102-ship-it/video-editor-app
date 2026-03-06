@@ -89,6 +89,7 @@ class BrowserManager:
             self._context = await self._playwright.chromium.launch_persistent_context(
                 profile_dir,
                 channel="chrome",
+                ignore_default_args=["--enable-automation"],
                 **common_kwargs,
             )
             logger.info(
@@ -103,6 +104,7 @@ class BrowserManager:
         try:
             self._context = await self._playwright.chromium.launch_persistent_context(
                 profile_dir,
+                ignore_default_args=["--enable-automation"],
                 **common_kwargs,
             )
             logger.info(
