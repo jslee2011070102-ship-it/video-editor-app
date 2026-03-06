@@ -6,7 +6,9 @@
 """
 from __future__ import annotations
 
+import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -24,6 +26,12 @@ EXPORTS_DIR = BASE_DIR / "data" / "exports"
 LOGS_DIR = BASE_DIR / "data" / "logs"
 CONFIG_DIR = BASE_DIR / "config"
 KEYWORDS_FILE = CONFIG_DIR / "keywords.txt"
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+def strip_ansi(text: str) -> str:
+    """ANSI 색상 코드를 제거한다."""
+    return _ANSI_RE.sub("", text)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 페이지 설정
@@ -228,6 +236,13 @@ with tab_crawl:
             st.session_state.log_lines.append(f"🚀 실행 명령: {' '.join(cmd)}\n")
             st.session_state.finished = False
 
+            # Windows 인코딩 + ANSI 컬러 비활성화 환경변수
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
+            env["PYTHONUNBUFFERED"] = "1"
+            env["NO_COLOR"] = "1"
+            env["LOGURU_COLORIZE"] = "false"
+
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(BASE_DIR),
@@ -237,6 +252,7 @@ with tab_crawl:
                 bufsize=1,
                 encoding="utf-8",
                 errors="replace",
+                env=env,
             )
             st.session_state.proc = proc
             st.session_state.is_running = True
@@ -267,7 +283,7 @@ with tab_crawl:
                     st.session_state.finished = True
                     updated = True
                     break
-                st.session_state.log_lines.append(line)
+                st.session_state.log_lines.append(strip_ansi(line))
                 updated = True
             except queue.Empty:
                 break
