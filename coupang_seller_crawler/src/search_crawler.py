@@ -102,7 +102,7 @@ class SearchCrawler:
                 response = await page.goto(
                     url,
                     timeout=self.config.timeout_sec * 1000,
-                    wait_until="domcontentloaded",
+                    wait_until="load",
                 )
 
                 if response is None:
@@ -115,8 +115,28 @@ class SearchCrawler:
                 if status >= 400:
                     raise RuntimeError(f"HTTP {status}: {url}")
 
-                # 페이지 로딩 안정화 대기
-                await asyncio.sleep(1)
+                # JS 렌더링 완료 대기: 상품 목록 또는 "결과없음" 요소 중 하나가 나타날 때까지
+                _product_candidate_selectors = [
+                    "li[class*='search-product']",
+                    "li[class*='baby-product']",
+                    "ul[class*='product-list'] li",
+                    "a[href*='/vp/products/']",
+                ]
+                for _sel in _product_candidate_selectors:
+                    try:
+                        await page.wait_for_selector(
+                            _sel,
+                            timeout=8000,
+                            state="attached",
+                        )
+                        logger.debug(f"[검색] JS 렌더링 확인: '{_sel}'")
+                        break
+                    except PlaywrightTimeout:
+                        continue
+                else:
+                    # 모든 선택자 실패 → 추가로 3초 대기 후 HTML 저장해 분석
+                    logger.debug("[검색] 상품 선택자 대기 실패 → 3초 추가 대기")
+                    await asyncio.sleep(3)
 
                 # 캡챠/비정상 페이지 감지
                 if await self._is_blocked(page):
