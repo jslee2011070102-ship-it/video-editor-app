@@ -91,8 +91,31 @@ class BrowserManager:
         self._playwright = await async_playwright().start()
 
         browser_type = self.config.browser_type.lower()
+
+        # chromium 타입이면 시스템에 설치된 실제 Chrome을 사용 (TLS 지문 우회 핵심)
+        # Playwright 번들 Chromium은 Akamai가 TLS/HTTP2 수준에서 차단함
+        if browser_type in ("chromium", "chrome"):
+            launch_kwargs: dict = dict(
+                headless=self.config.headless,
+                channel="chrome",          # 실제 설치된 Google Chrome 사용
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ],
+            )
+            try:
+                self._browser = await self._playwright.chromium.launch(**launch_kwargs)
+                logger.info(f"브라우저 시작: 실제 Chrome(channel=chrome) / headless={self.config.headless}")
+                return
+            except Exception as exc:
+                logger.warning(f"실제 Chrome 실행 실패({exc}), Playwright Chromium으로 대체")
+
+        # 폴백: Playwright 번들 Chromium 또는 Firefox/Webkit
         launcher = {
-            "chromium": self._playwright.chromium,
             "firefox": self._playwright.firefox,
             "webkit": self._playwright.webkit,
         }.get(browser_type, self._playwright.chromium)
@@ -102,17 +125,13 @@ class BrowserManager:
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
-                # Akamai/봇 탐지 우회 핵심 플래그
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
-                "--disable-extensions",
-                "--disable-default-apps",
                 "--no-first-run",
                 "--no-default-browser-check",
-                "--window-size=1280,900",
             ],
         )
-        logger.info(f"브라우저 시작: {browser_type} / headless={self.config.headless}")
+        logger.info(f"브라우저 시작: {browser_type}(번들) / headless={self.config.headless}")
 
     async def stop(self) -> None:
         """브라우저와 Playwright 를 종료한다."""
