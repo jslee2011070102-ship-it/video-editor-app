@@ -163,9 +163,14 @@ class SearchCrawler:
         try:
             title = await page.title()
             content = await page.content()
-            blocked_signals = ["captcha", "robot", "차단", "접근이 제한"]
-            return any(sig in content.lower() for sig in blocked_signals) or (
-                "captcha" in title.lower()
+            blocked_signals = [
+                "captcha", "robot", "차단", "접근이 제한",
+                "access denied", "edgesuite.net", "you don't have permission",
+            ]
+            title_lower = title.lower()
+            content_lower = content.lower()
+            return any(sig in content_lower for sig in blocked_signals) or (
+                "captcha" in title_lower or "access denied" in title_lower
             )
         except Exception:
             return False
