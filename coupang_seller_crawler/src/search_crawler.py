@@ -115,7 +115,8 @@ class SearchCrawler:
                         wait_until="load",
                     )
                     if resp and resp.status == 403:
-                        logger.warning("[검색] 홈페이지 403 차단 → URL 직접 접근으로 대체")
+                        logger.warning("[검색] 홈페이지 403 차단 → 30초 대기 후 URL 직접 접근")
+                        await asyncio.sleep(30)
                         use_search_box = False
                     else:
                         # 홈페이지 로딩 후 짧게 대기
@@ -159,8 +160,12 @@ class SearchCrawler:
                         raise RuntimeError(f"응답이 없습니다: {url}")
                     status = response.status
                     if status == 403:
-                        logger.warning(f"[검색] 403 차단됨. keyword={keyword}, page={page_num}")
-                        return []
+                        logger.warning(
+                            f"[검색] 403 차단됨. keyword={keyword}, page={page_num} "
+                            f"→ 45초 대기 후 재시도"
+                        )
+                        await asyncio.sleep(45)
+                        raise RuntimeError(f"HTTP 403 (재시도): {url}")
                     if status >= 400:
                         raise RuntimeError(f"HTTP {status}: {url}")
 

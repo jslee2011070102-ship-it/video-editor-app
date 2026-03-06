@@ -234,6 +234,63 @@ class BrowserManager:
         )
         logger.info("브라우저 시작: 임시 컨텍스트(폴백)")
 
+    async def _has_akamai_cookies(self) -> bool:
+        """Akamai Bot Manager 쿠키(bm_sz, _abck)가 설정되어 있는지 확인한다."""
+        if not self._context:
+            return False
+        cookies = await self._context.cookies("https://www.coupang.com")
+        akamai_names = {"bm_sz", "_abck", "ak_bmsc"}
+        return any(c["name"] in akamai_names for c in cookies)
+
+    async def warmup_akamai_session(self) -> bool:
+        """쿠팡 홈을 방문해 Akamai 세션 쿠키를 초기화한다.
+
+        Returns:
+            True: 쿠키가 설정됨 (차단 없음)
+            False: 403 차단 또는 쿠키 미설정
+        """
+        if not self._context:
+            return False
+
+        # 이미 Akamai 쿠키가 있으면 스킵
+        if await self._has_akamai_cookies():
+            logger.debug("[웜업] Akamai 세션 쿠키 이미 존재 → 웜업 스킵")
+            return True
+
+        logger.info("[웜업] Akamai 세션 초기화 중 (coupang.com 홈 방문)...")
+        page = await self._context.new_page()
+        await page.add_init_script(_STEALTH_SCRIPT)
+
+        try:
+            resp = await page.goto(
+                "https://www.coupang.com",
+                wait_until="load",
+                timeout=30000,
+            )
+            if resp is None or resp.status == 403:
+                logger.warning("[웜업] 홈 403 차단 → 쿠키 주입 후 재시도 필요")
+                return False
+
+            # 짧은 스크롤로 인간 행동 모방
+            await asyncio.sleep(random.uniform(1.5, 2.5))
+            await page.evaluate("window.scrollTo({top: 300, behavior: 'smooth'})")
+            await asyncio.sleep(random.uniform(0.8, 1.5))
+            await page.evaluate("window.scrollTo({top: 0, behavior: 'smooth'})")
+            await asyncio.sleep(random.uniform(0.5, 1.0))
+
+            has_cookies = await self._has_akamai_cookies()
+            if has_cookies:
+                logger.info("[웜업] Akamai 세션 쿠키 설정 완료")
+            else:
+                logger.warning("[웜업] 홈 방문 후에도 Akamai 쿠키 없음 → 차단 상태")
+            return has_cookies
+
+        except Exception as exc:
+            logger.warning(f"[웜업] 예외 발생: {exc}")
+            return False
+        finally:
+            await page.close()
+
     async def stop(self) -> None:
         """컨텍스트와 Playwright 를 종료한다."""
         if self._context:
@@ -268,10 +325,16 @@ async def random_delay(min_sec: float, max_sec: float) -> None:
 
 @asynccontextmanager
 async def managed_browser(config: AppConfig) -> AsyncGenerator[BrowserManager, None]:
-    """컨텍스트 매니저: BrowserManager 를 생성하고 사용 후 종료한다."""
+    """컨텍스트 매니저: BrowserManager 를 생성하고 사용 후 종료한다.
+
+    브라우저 시작 후 Akamai 세션 웜업을 자동으로 수행한다.
+    이미 쿠키가 있으면 웜업을 건너뛴다.
+    """
     manager = BrowserManager(config)
     await manager.start()
     try:
+        # Akamai 세션 쿠키 자동 초기화 (쿠키 없을 때만 홈 방문)
+        await manager.warmup_akamai_session()
         yield manager
     finally:
         await manager.stop()
