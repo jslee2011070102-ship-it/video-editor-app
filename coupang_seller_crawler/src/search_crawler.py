@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from typing import List, Optional, Set
 
 from loguru import logger
@@ -43,8 +44,14 @@ class SearchCrawler:
         logger.info(f"[검색] 키워드 시작: '{keyword}' (최대 {max_pages}페이지)")
 
         async with self.browser.new_page() as page:
+            # 1페이지는 홈에서 검색창 직접 입력, 이후 페이지는 URL 이동
+            homepage_visited = False
             for page_num in range(1, max_pages + 1):
-                products = await self._crawl_page(page, keyword, page_num)
+                products = await self._crawl_page(
+                    page, keyword, page_num,
+                    use_search_box=(page_num == 1 and not homepage_visited),
+                )
+                homepage_visited = True
 
                 if not products:
                     logger.info(
@@ -86,7 +93,8 @@ class SearchCrawler:
         return all_products
 
     async def _crawl_page(
-        self, page: Page, keyword: str, page_num: int
+        self, page: Page, keyword: str, page_num: int,
+        use_search_box: bool = False,
     ) -> List[ProductItem]:
         """검색 결과 한 페이지를 크롤링한다."""
         url = make_coupang_search_url(keyword, page_num)
@@ -98,24 +106,65 @@ class SearchCrawler:
             reraise=True,
         ):
             with attempt:
-                logger.debug(f"[검색] page={page_num} 요청: {url}")
-                response = await page.goto(
-                    url,
-                    timeout=self.config.timeout_sec * 1000,
-                    wait_until="load",
-                )
+                if use_search_box and page_num == 1:
+                    # 홈페이지 먼저 방문 → 검색창에 직접 입력 (인간 행동 모방)
+                    logger.debug("[검색] 홈페이지 방문 후 검색창 입력 방식 사용")
+                    resp = await page.goto(
+                        "https://www.coupang.com",
+                        timeout=self.config.timeout_sec * 1000,
+                        wait_until="load",
+                    )
+                    if resp and resp.status == 403:
+                        logger.warning("[검색] 홈페이지 403 차단 → URL 직접 접근으로 대체")
+                        use_search_box = False
+                    else:
+                        # 홈페이지 로딩 후 짧게 대기
+                        await asyncio.sleep(random.uniform(1.5, 3.0))
 
-                if response is None:
-                    raise RuntimeError(f"응답이 없습니다: {url}")
+                        # 검색창 찾아 입력
+                        _search_selectors = [
+                            "input#headerSearchInput",
+                            "input[name='q']",
+                            "input[placeholder*='검색']",
+                            "input.search-input",
+                        ]
+                        search_input = None
+                        for sel in _search_selectors:
+                            try:
+                                search_input = await page.wait_for_selector(sel, timeout=5000)
+                                if search_input:
+                                    break
+                            except PlaywrightTimeout:
+                                continue
 
-                status = response.status
-                if status == 403:
-                    logger.warning(f"[검색] 403 차단됨. keyword={keyword}, page={page_num}")
-                    return []
-                if status >= 400:
-                    raise RuntimeError(f"HTTP {status}: {url}")
+                        if search_input:
+                            await search_input.click()
+                            await asyncio.sleep(random.uniform(0.3, 0.7))
+                            await search_input.type(keyword, delay=random.randint(50, 120))
+                            await asyncio.sleep(random.uniform(0.3, 0.6))
+                            await page.keyboard.press("Enter")
+                            logger.debug(f"[검색] 검색창 입력 완료: '{keyword}'")
+                        else:
+                            logger.debug("[검색] 검색창 미발견 → URL 직접 접근")
+                            use_search_box = False
 
-                # JS 렌더링 완료 대기: 상품 목록 또는 "결과없음" 요소 중 하나가 나타날 때까지
+                if not use_search_box or page_num > 1:
+                    logger.debug(f"[검색] page={page_num} URL 직접 접근: {url}")
+                    response = await page.goto(
+                        url,
+                        timeout=self.config.timeout_sec * 1000,
+                        wait_until="load",
+                    )
+                    if response is None:
+                        raise RuntimeError(f"응답이 없습니다: {url}")
+                    status = response.status
+                    if status == 403:
+                        logger.warning(f"[검색] 403 차단됨. keyword={keyword}, page={page_num}")
+                        return []
+                    if status >= 400:
+                        raise RuntimeError(f"HTTP {status}: {url}")
+
+                # JS 렌더링 완료 대기
                 _product_candidate_selectors = [
                     "li[class*='search-product']",
                     "li[class*='baby-product']",
@@ -124,25 +173,18 @@ class SearchCrawler:
                 ]
                 for _sel in _product_candidate_selectors:
                     try:
-                        await page.wait_for_selector(
-                            _sel,
-                            timeout=8000,
-                            state="attached",
-                        )
+                        await page.wait_for_selector(_sel, timeout=10000, state="attached")
                         logger.debug(f"[검색] JS 렌더링 확인: '{_sel}'")
                         break
                     except PlaywrightTimeout:
                         continue
                 else:
-                    # 모든 선택자 실패 → 추가로 3초 대기 후 HTML 저장해 분석
                     logger.debug("[검색] 상품 선택자 대기 실패 → 3초 추가 대기")
                     await asyncio.sleep(3)
 
-                # 캡챠/비정상 페이지 감지
+                # 차단 페이지 감지
                 if await self._is_blocked(page):
-                    logger.warning(
-                        f"[검색] 차단 감지. keyword={keyword}, page={page_num}"
-                    )
+                    logger.warning(f"[검색] 차단 감지. keyword={keyword}, page={page_num}")
                     return []
 
                 html = await page.content()

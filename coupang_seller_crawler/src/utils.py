@@ -46,17 +46,13 @@ def truncate(text: Optional[str], max_len: int = 500) -> Optional[str]:
 
 
 def make_coupang_search_url(keyword: str, page: int = 1) -> str:
-    """쿠팡 검색 URL 을 생성한다."""
-    from urllib.parse import quote_plus
-    encoded = quote_plus(keyword)
-    return (
-        f"https://www.coupang.com/np/search"
-        f"?q={encoded}&channel=user&component=&eventCategory=SRP"
-        f"&trcid=&traid=&sorter=scoreDesc&minPrice=&maxPrice="
-        f"&priceRange=&filterType=&listSize=36&filter=&isPriceRange=false"
-        f"&brand=&offerCondition=&rating=0&page={page}"
-        f"&rocketAll=false&searchIndexingToken=&backgroundColor="
-    )
+    """쿠팡 검색 URL 을 생성한다 (최소 파라미터)."""
+    from urllib.parse import quote
+    encoded = quote(keyword)
+    base = f"https://www.coupang.com/np/search?q={encoded}"
+    if page > 1:
+        base += f"&page={page}"
+    return base
 
 
 def dataclass_to_dict(obj: Any) -> Dict[str, Any]:
