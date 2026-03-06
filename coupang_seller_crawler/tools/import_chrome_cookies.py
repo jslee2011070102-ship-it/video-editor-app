@@ -227,11 +227,6 @@ def read_chrome_cookies(host_filter: str = "coupang.com") -> List[dict]:
         print("       Chrome을 설치했는지 확인하고, 종료 후 다시 시도하세요.", file=sys.stderr)
         return []
 
-    # DB를 임시 파일로 복사 (Chrome이 잠갔을 수 있으므로)
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-        tmp_path = tmp.name
-    shutil.copy2(str(cookie_db_path), tmp_path)
-
     # Windows용 암호화 키
     win_key: Optional[bytes] = None
     mac_key: Optional[bytes] = None
@@ -240,10 +235,36 @@ def read_chrome_cookies(host_filter: str = "coupang.com") -> List[dict]:
     elif system == "Darwin":
         mac_key = _get_macos_chrome_key()
 
+    # SQLite 연결: Chrome 실행 중에도 읽을 수 있도록 immutable URI 방식 우선 시도
+    tmp_path: Optional[str] = None
+    conn: Optional[sqlite3.Connection] = None
+
+    # 1순위: immutable=1 URI 직접 읽기 (Chrome 실행 중 잠긴 파일도 접근 가능)
+    try:
+        uri = f"file:{cookie_db_path}?mode=ro&immutable=1"
+        _conn = sqlite3.connect(uri, uri=True)
+        _conn.execute("SELECT name FROM cookies LIMIT 1")  # 실제 접근 가능 여부 확인
+        conn = _conn
+        print("[정보] Chrome 쿠키 DB에 직접 접근 (Chrome 실행 중이어도 OK)")
+    except Exception:
+        pass
+
+    # 2순위: 파일 복사 후 읽기 (URI 방식이 실패한 경우)
+    if conn is None:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+                tmp_path = tmp.name
+            shutil.copy2(str(cookie_db_path), tmp_path)
+            conn = sqlite3.connect(tmp_path)
+            print("[정보] Chrome 쿠키 DB 복사 후 접근")
+        except PermissionError as e:
+            print(f"[오류] 쿠키 DB 접근 실패: {e}", file=sys.stderr)
+            print("       Chrome을 완전히 종료(작업 표시줄 아이콘까지 닫기) 후 재시도하세요.", file=sys.stderr)
+            return []
+
+    conn.row_factory = sqlite3.Row
     cookies: List[dict] = []
     try:
-        conn = sqlite3.connect(tmp_path)
-        conn.row_factory = sqlite3.Row
         cursor = conn.execute(
             """
             SELECT host_key, name, encrypted_value, value, path,
